@@ -37,7 +37,7 @@ class CPU:
         self.branch_table[0b10000100] = self.ST
         self.branch_table[0b01001000] = self.PRA
         self.branch_table[0b00010011] = self.IRET
-
+        
     def ram_read(self, address):
         return self.ram[address]
 
@@ -167,34 +167,50 @@ class CPU:
         self.time = int(datetime.now().strftime("%Y-%m-%d %H:%M:%S")[-2:])
         self.reg[0] = 15
 
+
     def load(self):
         """Load a program into memory."""
 
         address = 0
 
-        # For now, we've just hardcoded a program:
+        if len(sys.argv) != 2:
+            print('usage: cpu.py filename')
+            sys.exit(1)
 
-        program = [
-            # From print8.ls8
-            0b10000010, # LDI R0,8
-            0b00000000,
-            0b00001000,
-            0b01000111, # PRN R0
-            0b00000000,
-            0b00000001, # HLT
-        ]
+        try:
+            with open(sys.argv[1]) as f:
+                for line in f:
+                    comment_split = line.split('#')
+                    code_snip = comment_split[0].strip()
 
-        for instruction in program:
-            self.ram[address] = instruction
-            address += 1
+                    if code_snip == '':
+                        continue
+                    
+                    binary = int(code_snip, 2)
+                    self.ram[address] = binary
+                    address += 1
 
+        except FileNotFoundError:
+            print(f'{sys.argv[1]} could not be found')
+            sys.exit(2)
 
     def alu(self, op, reg_a, reg_b):
         """ALU operations."""
 
         if op == "ADD":
             self.reg[reg_a] += self.reg[reg_b]
-        #elif op == "SUB": etc
+
+        elif op == "MULTIPLY":
+            self.reg[reg_a] *= self.reg[reg_b]
+
+        elif op == "COMPARE":
+            if self.reg[reg_a] < self.reg[reg_b]:
+                self.reg[self.fl] = 0b00000100
+            elif self.reg[reg_a] > self.reg[reg_b]:
+                self.reg[self.fl] = 0b00000010
+            elif self.reg[reg_a] == self.reg[reg_b]:
+                self.reg[self.fl] = 0b00000001
+
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -220,4 +236,48 @@ class CPU:
 
     def run(self):
         """Run the CPU."""
-        pass
+        self.running = True
+    
+        while self.running:
+            if int(datetime.now().strftime("%Y-%m-%d %H:%M:%S")[-2:]) == self.time + 1:
+                self.reg[self.IS] = 0b00000001
+
+            elif bin(self.reg[self.IS]) == '0b1' :
+                masked_interrupts = self.reg[self.IM] & self.reg[self.IS]
+
+                for i in range(8):
+                    interrupt_happened = ((masked_interrupts >> i) & 1) == 1
+                    if interrupt_happened:
+                        self.reg[self.IS] = 0b00000000
+                        self.ram[self.reg[self.sp]] = self.pc
+                        self.reg[self.sp] -= 1
+                        self.ram[self.reg[self.sp]] = self.reg[self.fl]
+                        self.reg[self.sp] -= 1
+                        self.ram[self.reg[self.sp]] = self.reg[0]
+                        self.reg[self.sp] -= 1
+                        self.ram[self.reg[self.sp]] = self.reg[1]
+                        self.reg[self.sp] -= 1
+                        self.ram[self.reg[self.sp]] = self.reg[2]
+                        self.reg[self.sp] -= 1
+                        self.ram[self.reg[self.sp]] = self.reg[3]
+                        self.reg[self.sp] -= 1
+                        self.ram[self.reg[self.sp]] = self.reg[4]
+                        self.reg[self.sp] -= 1
+                        self.ram[self.reg[self.sp]] = self.reg[5]
+                        self.reg[self.sp] -= 1
+                        self.ram[self.reg[self.sp]] = self.reg[6]
+                        self.pc = self.ram[0xf8]
+
+                continue
+
+            else:
+                IR = self.ram[self.pc]
+                # print(bin(IR))
+    
+                if IR in self.branch_table:
+                    # print(self.branch_table[self.ram[self.pc]])
+                    self.branch_table[IR]()
+
+                else:
+                    print(f'unknown command {IR}')
+                    self.running = False
