@@ -8,222 +8,112 @@ class CPU:
 
     def __init__(self):
         self.ram = [0] * 256
-        self.reg = [0,0,0,0,0,0,0,0]
-        self.running = False
+        self.reg = [0] * 8
+        self.flags = [0] * 8
         self.pc = 0
         self.sp = 7
-        self.reg[self.sp] = 0xf4
-        self.IS = 6
-        self.reg[self.IS] = 0b00000000
-        self.IM = 5
-        self.reg[self.IM] = 0b00000000
-        self.fl = 4
-        self.reg[self.fl] = 0b00000000
+        self.reg[self.sp] = 0xF4
         self.time = int(datetime.now().strftime("%Y-%m-%d %H:%M:%S")[-2:])
-        self.branch_table = {}
-        self.branch_table[0b10000010] = self.LDI
-        self.branch_table[0b01000111] = self.PRN
-        self.branch_table[0b00000001] = self.HLT
-        self.branch_table[0b10100000] = self.ADD
-        self.branch_table[0b10100010] = self.MUL
-        self.branch_table[0b01000101] = self.PUSH
-        self.branch_table[0b01000110] = self.POP
-        self.branch_table[0b01010000] = self.CALL
-        self.branch_table[0b00010001] = self.RET
-        self.branch_table[0b10100111] = self.CMP
-        self.branch_table[0b01010100] = self.JMP
-        self.branch_table[0b01010101] = self.JEQ
-        self.branch_table[0b01010110] = self.JNE
-        self.branch_table[0b10000100] = self.ST
-        self.branch_table[0b01001000] = self.PRA
-        self.branch_table[0b00010011] = self.IRET
-        
-    def ram_read(self, address):
-        return self.ram[address]
+        self.instructions = {
+            0b10000010: self.ldi,
+            0b01000111: self.prn,
+            0b00000001: self.hlt,
+            0b10100000: self.add,
+            0b10100001: self.sub,
+            0b10100010: self.mul,
+            0b10100011: self.div,
+            0b01000101: self.push,
+            0b01000110: self.pop,
+            0b01010000: self.call,
+            0b00010001: self.ret,
+            0b10100111: self.compare,
+            0b01010101: self.jeq,
+            0b01010110: self.jne,
+            0b01010100: self.jmp,
+            0b10101000: self.and_op,
+            0b10101010: self.or_op,
+            0b01101001: self.not_op,
+            0b10101011: self.xor,
+            0b10101100: self.shl,
+            0b10101101: self.shr,
+            0b10100100: self.mod
+        }
 
-    def ram_write(self, value, address):
-        self.ram[address] = value
+    def ram_read(self, pc):
+        return self.ram[pc]
 
-    def LDI(self):
-        operand_a = self.ram[self.pc + 1]
-        operand_b = self.ram[self.pc + 2]
-        self.reg[operand_a] = operand_b
-        self.pc += 3
-
-    def PRN(self):
-        operand_a = self.ram[self.pc + 1]
-        print(self.reg[operand_a])
-        self.pc += 2
-
-    def HLT(self):
-        self.running = False
-
-    def ADD(self):
-        operand_a = self.ram[self.pc + 1]
-        operand_b = self.ram[self.pc + 2]
-        self.alu("ADD", operand_a, operand_b)
-        self.pc += 3
-
-    def MUL(self):
-        operand_a = self.ram[self.pc + 1]
-        operand_b = self.ram[self.pc + 2]
-        self.alu('MULTIPLY', operand_a, operand_b)
-        self.pc += 3
-
-    def PUSH(self):
-        operand_a = self.ram[self.pc + 1]
-        self.reg[self.sp] -= 1
-        value = self.reg[operand_a]
-        self.ram[self.sp] = value
-        self.pc += 2
-
-    def POP(self):
-        operand_a = self.ram[self.pc + 1]
-        value = self.ram[self.sp]
-        self.reg[operand_a] = value
-        self.reg[self.sp] += 1
-        self.pc += 2
-
-    def CALL(self):
-        return_address = self.pc + 2
-        self.reg[self.sp] -= 1
-        self.ram[self.reg[self.sp]] = return_address
-        register = self.ram[self.pc + 1]
-        dest = self.reg[register]
-        self.pc = dest
-
-    def RET(self):
-        self.pc = self.ram[self.reg[self.sp]]
-        self.reg[self.sp] += 1
-
-    def CMP(self):
-        reg_a = self.ram[self.pc + 1]
-        reg_b = self.ram[self.pc + 2]
-        self.alu('COMPARE', reg_a, reg_b)
-        self.pc += 3
-
-    def JMP(self):
-        reg_a = self.ram[self.pc + 1]
-        address = self.reg[reg_a]
-        self.pc = address
-
-    def JEQ(self):
-        mask = bin(0b00000001 & self.reg[self.fl])
-        if mask == '0b1':
-            reg_a = self.ram[self.pc + 1]
-            address = self.reg[reg_a]
-            self.pc = address
-        else:
-            self.pc += 2
-
-    def JNE(self):
-        mask = bin(0b00000001 & self.reg[self.fl])
-        if mask == '0b0':
-            reg_a = self.ram[self.pc + 1]
-            address = self.reg[reg_a]
-            self.pc = address
-        else:
-            self.pc += 2
-
-    def ST(self):
-        operand_a = self.ram[self.pc + 1]
-        operand_b = self.ram[self.pc + 2]
-        address = self.reg[operand_a]
-        value = self.reg[operand_b]
-        self.ram[address] = value
-        self.pc += 3
-
-    def PRA(self):
-        operand_a = self.ram[self.pc + 1]
-        value = self.reg[operand_a]
-        if value == 65:
-            print('A')
-        self.pc += 2
-
-    def IRET(self):
-        #pop all registers off stack
-        self.ram[self.reg[self.sp]] = 0
-        self.reg[self.sp] += 1
-        self.ram[self.reg[self.sp]] = 0
-        self.reg[self.sp] += 1
-        self.ram[self.reg[self.sp]] = 0
-        self.reg[self.sp] += 1
-        self.ram[self.reg[self.sp]] = 0
-        self.reg[self.sp] += 1
-        self.ram[self.reg[self.sp]] = 0
-        self.reg[self.sp] += 1
-        self.ram[self.reg[self.sp]] = 0
-        self.reg[self.sp] += 1
-        self.ram[self.reg[self.sp]] = 0
-        self.reg[self.sp] += 1
-        #fl popped off
-        self.ram[self.reg[self.sp]] = 0
-        self.reg[self.sp] += 1
-        #return address
-        address = self.ram[self.reg[self.sp]]
-        self.ram[self.reg[self.sp]] = 0
-        self.pc = address
-        #interrupts
-        self.time = int(datetime.now().strftime("%Y-%m-%d %H:%M:%S")[-2:])
-        self.reg[0] = 15
-
+    def ram_write(self, pc, value):
+        self.ram[pc] = value
 
     def load(self):
         """Load a program into memory."""
+        if len(sys.argv) < 2:
+            raise NameError("Input program not specified, exiting")
 
+        program_name = sys.argv[1]
         address = 0
 
-        if len(sys.argv) != 2:
-            print('usage: cpu.py filename')
-            sys.exit(1)
+        with open(program_name) as p:
+            for line in p:
+                line = line.split("#")[0]
 
-        try:
-            with open(sys.argv[1]) as f:
-                for line in f:
-                    comment_split = line.split('#')
-                    code_snip = comment_split[0].strip()
+                try:
+                    instruction = int(line, 2)
+                except ValueError:
+                    continue
 
-                    if code_snip == '':
-                        continue
-                    
-                    binary = int(code_snip, 2)
-                    self.ram[address] = binary
-                    address += 1
+                self.ram[address] = instruction
+                address += 1
 
-        except FileNotFoundError:
-            print(f'{sys.argv[1]} could not be found')
-            sys.exit(2)
-
-    def alu(self, op, reg_a, reg_b):
+    def alu(self, op, reg_a, reg_b=None):
         """ALU operations."""
 
         if op == "ADD":
             self.reg[reg_a] += self.reg[reg_b]
-
-        elif op == "MULTIPLY":
+        elif op == "SUB":
+            self.reg[reg_a] -= self.reg[reg_b]
+        elif op == "MUL":
             self.reg[reg_a] *= self.reg[reg_b]
-
-        elif op == "COMPARE":
-            if self.reg[reg_a] < self.reg[reg_b]:
-                self.reg[self.fl] = 0b00000100
-            elif self.reg[reg_a] > self.reg[reg_b]:
-                self.reg[self.fl] = 0b00000010
-            elif self.reg[reg_a] == self.reg[reg_b]:
-                self.reg[self.fl] = 0b00000001
-
+        elif op == "DIV":
+            self.reg[reg_a] /= self.reg[reg_b]
+        elif op == "MOD":
+            self.reg[reg_a] %= self.reg[reg_b]
+        elif op == "AND":
+            result = self.reg[reg_a] & self.reg[reg_b]
+            self.reg[reg_a] = result
+        elif op == "OR":
+            result = self.reg[reg_a] | self.reg[reg_b]
+            self.reg[reg_a] = result
+        elif op == "XOR":
+            result = self.reg[reg_a] ^ self.reg[reg_b]
+            self.reg[reg_a] = result
+        elif op == "SHL":
+            result = self.reg[reg_a] << self.reg[reg_b]
+            self.reg[reg_a] = result
+        elif op == "SHR":
+            result = self.reg[reg_a] >> self.reg[reg_b]
+            self.reg[reg_a] = result
+        elif op == "NOT":
+            self.reg[reg_a] = ~self.reg[reg_a]
+        elif op == "CMP":
+            if self.reg[reg_a] == self.reg[reg_b]:
+                self.flags[-1] = 1
+            elif self.reg[reg_a] < self.reg[reg_b]:
+                self.flags[-3] = 1
+            else:
+                self.flags[-2] = 1
         else:
             raise Exception("Unsupported ALU operation")
 
     def trace(self):
         """
-        Handy function to print out the CPU state. You might want to call this
-        from run() if you need help debugging.
+        CPU State Print Out for Debugging
         """
 
         print(f"TRACE: %02X | %02X %02X %02X |" % (
             self.pc,
-            #self.fl,
-            #self.ie,
+            # self.fl,
+            # self.ie,
             self.ram_read(self.pc),
             self.ram_read(self.pc + 1),
             self.ram_read(self.pc + 2)
@@ -236,48 +126,137 @@ class CPU:
 
     def run(self):
         """Run the CPU."""
-        self.running = True
-    
-        while self.running:
-            if int(datetime.now().strftime("%Y-%m-%d %H:%M:%S")[-2:]) == self.time + 1:
-                self.reg[self.IS] = 0b00000001
 
-            elif bin(self.reg[self.IS]) == '0b1' :
-                masked_interrupts = self.reg[self.IM] & self.reg[self.IS]
+        running = True
 
-                for i in range(8):
-                    interrupt_happened = ((masked_interrupts >> i) & 1) == 1
-                    if interrupt_happened:
-                        self.reg[self.IS] = 0b00000000
-                        self.ram[self.reg[self.sp]] = self.pc
-                        self.reg[self.sp] -= 1
-                        self.ram[self.reg[self.sp]] = self.reg[self.fl]
-                        self.reg[self.sp] -= 1
-                        self.ram[self.reg[self.sp]] = self.reg[0]
-                        self.reg[self.sp] -= 1
-                        self.ram[self.reg[self.sp]] = self.reg[1]
-                        self.reg[self.sp] -= 1
-                        self.ram[self.reg[self.sp]] = self.reg[2]
-                        self.reg[self.sp] -= 1
-                        self.ram[self.reg[self.sp]] = self.reg[3]
-                        self.reg[self.sp] -= 1
-                        self.ram[self.reg[self.sp]] = self.reg[4]
-                        self.reg[self.sp] -= 1
-                        self.ram[self.reg[self.sp]] = self.reg[5]
-                        self.reg[self.sp] -= 1
-                        self.ram[self.reg[self.sp]] = self.reg[6]
-                        self.pc = self.ram[0xf8]
+        while running == True:
+            ir = self.ram[self.pc]
+            instruction = self.instructions.get(ir)
+            sets_pc = (ir >> 4) & 0b1
 
-                continue
+            if instruction and not sets_pc:
+                inc = (ir >> 6) + 1
+                self.instructions[ir]()
+                self.pc += inc
+            elif instruction:
+                self.instructions[ir]()
 
-            else:
-                IR = self.ram[self.pc]
-                # print(bin(IR))
-    
-                if IR in self.branch_table:
-                    # print(self.branch_table[self.ram[self.pc]])
-                    self.branch_table[IR]()
+    def ldi(self):
+        address = self.ram[self.pc+1]
+        value = self.ram[self.pc+2]
+        self.reg[address] = value
 
-                else:
-                    print(f'unknown command {IR}')
-                    self.running = False
+    def prn(self):
+        address = self.ram[self.pc+1]
+        value = self.reg[address]
+        print(value)
+
+    def hlt(self):
+        sys.exit(0)
+
+    def add(self):
+        addresses = self.get_operands()
+        self.alu("ADD", *addresses)
+
+    def sub(self):
+        addresses = self.get_operands()
+        self.alu("SUB", *addresses)
+
+    def mul(self):
+        addresses = self.get_operands()
+        self.alu("MUL", *addresses)
+
+    def div(self):
+        addresses = self.get_operands()
+        self.alu("DIV", *addresses)
+
+    def compare(self):
+        addresses = self.get_operands()
+        self.alu("CMP", *addresses)
+
+    def get_operands(self):
+        address_1 = self.ram[self.pc+1]
+        address_2 = self.ram[self.pc+2]
+
+        return [address_1, address_2]
+
+    def push(self):
+        self.sp -= 1
+
+        address = self.ram[self.pc+1]
+        value = self.reg[address]
+        self.ram[self.sp] = value
+
+    def pop(self):
+        address = self.ram[self.pc+1]
+        value = self.ram[self.sp]
+        self.reg[address] = value
+
+        self.sp += 1
+
+    def call(self):
+        #mem address after subroutine
+        return_addr = self.pc + 2
+
+        # push to stack
+        self.sp -= 1
+        self.ram[self.reg[self.sp]] = return_addr
+
+        #find address to call
+        reg_num = self.ram[self.pc+1]
+        subroutine_addr = self.reg[reg_num]
+
+        self.pc = subroutine_addr
+
+    def ret(self):
+        self.pc = self.ram[self.reg[self.sp]]
+        self.sp += 1
+
+    def jeq(self):
+        if self.flags[-1] == 1:
+            address = self.ram[self.pc+1]
+            jump_to = self.reg[address]
+            self.pc = jump_to
+        else:
+            self.pc += 2
+
+    def jne(self):
+        if self.flags[-1] == 0:
+            address = self.ram[self.pc+1]
+            jump_to = self.reg[address]
+            self.pc = jump_to
+        else:
+            self.pc += 2
+
+    def jmp(self):
+        address = self.ram[self.pc+1]
+        jump_to = self.reg[address]
+        self.pc = jump_to
+
+    def and_op(self):
+        addresses = self.get_operands()
+        self.alu("AND", *addresses)
+
+    def or_op(self):
+        addresses = self.get_operands()
+        self.alu("OR", *addresses)
+
+    def not_op(self):
+        operand_addr = self.ram[self.pc+1]
+        self.alu("NOT", operand_addr)
+
+    def xor(self):
+        addresses = self.get_operands()
+        self.alu("XOR", *addresses)
+
+    def shl(self):
+        addresses = self.get_operands()
+        self.alu("SHL", *addresses)
+
+    def shr(self):
+        addresses = self.get_operands()
+        self.alu("SHR", *addresses)
+
+    def mod(self):
+        addresses = self.get_operands()
+        self.alu("MOD", *addresses)
